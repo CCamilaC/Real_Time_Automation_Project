@@ -209,6 +209,7 @@ DWORD WINAPI CLPMsgFerrovia(LPVOID) {
         ReleaseMutex(hMutexBufferFerrovia); //Libera MUTEX
 
         if (ferroviaCheia) {
+			printf("\033[31m[CLP FERROVIA]\033[0m Buffer Ferrovia cheio, aguardando espaço disponível...\n");
             WaitForSingleObject(ferroviaBuffer.hEventSpaceAvailable, INFINITE);
         }
 
@@ -261,6 +262,7 @@ DWORD WINAPI CLPMsgRodaQuente(LPVOID) {
         ReleaseMutex(hMutexBufferRoda); //Libera MUTEX
 
         if (rodaCheia) {
+			printf("\033[31m[CLP HOTBOX]\033[0m Buffer Roda cheio, aguardando espaço disponível...\n");
             WaitForSingleObject(rodaBuffer.hEventSpaceAvailable, INFINITE);
         }
 
@@ -317,7 +319,7 @@ BOOL EscreveMensagemDisco(const char* mensagem) {
 	// Verifica se há espaço no arquivo circular
     if (posicao_escrita >= (MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH)) {
         ReleaseMutex(hMutexArquivoDisco);
-        printf("[INFO] Buffer cheio. Aguardando espaço liberado...\n");
+        printf("[INFO] Arquivo cheio. Aguardando espaço liberado...\n");
         WaitForSingleObject(hEventEspacoDiscoDisponivel, INFINITE);
         return EscreveMensagemDisco(mensagem); // Tenta novamente recursivamente
     }
