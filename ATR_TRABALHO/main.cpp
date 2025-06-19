@@ -302,18 +302,37 @@ DWORD WINAPI CLPMsgRodaQuente(LPVOID) {
 
 //######### FUNÇÃO PARA ESCRITA NO ARQUIVO EM DISCO ##################
 BOOL EscreveMensagemDisco(const char* mensagem) {
-    WaitForSingleObject(hMutexArquivoDisco, INFINITE);
+    if (lpimage == NULL) {
+        printf("[Erro] Imagem de disco não mapeada.\n");
+        return FALSE;
+    }
 
-	// Escreve a mensagem no arquivo circular
-    errno_t err = strcpy_s(lpimage, MAX_MSG_LENGTH, mensagem);
+    WaitForSingleObject(hMutexArquivoDisco, INFINITE);
+    long posicao_escrita = 0;
+
+    while (posicao_escrita < (MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH) &&
+        lpimage[posicao_escrita] != '\0') {
+        posicao_escrita += MAX_MSG_LENGTH;
+    }
+
+    // Verifica se há espaço no arquivo circular
+    if (posicao_escrita >= (MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH)) {
+        ReleaseMutex(hMutexArquivoDisco);
+        printf("[INFO] Arquivo cheio. Aguardando espaço liberado...\n");
+        WaitForSingleObject(hEventEspacoDiscoDisponivel, INFINITE);
+        return EscreveMensagemDisco(mensagem); // Tenta novamente recursivamente
+    }
+
+    // Escreve a mensagem no arquivo circular
+    errno_t err = strcpy_s(lpimage + posicao_escrita, MAX_MSG_LENGTH, mensagem);
     if (err != 0) {
         // Tratamento de erro na cópia
         ReleaseMutex(hMutexArquivoDisco);
         return FALSE;
     }
 
-    // Sinaliza~ção que há nova mensagem disponível encontra-se na função original
-    ResetEvent(hEventSemMsgNovas);
+    // Sinalização que há nova mensagem disponível encontra-se na função original
+    SetEvent(hEventMsgDiscoDisponivel);
     ReleaseMutex(hMutexArquivoDisco);
 
     return TRUE;

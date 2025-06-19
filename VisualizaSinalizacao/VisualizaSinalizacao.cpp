@@ -11,12 +11,12 @@
 //############# HANDLES #############
 HANDLE evVISUFERROVIA_PauseResume;
 HANDLE evVISUFERROVIA_Exit;
-HANDLE evVISUFERROVIATemporiza��o;
+HANDLE evVISUFERROVIATemporizacao;
 HANDLE evEncerraThreads;
 HANDLE hEventMsgDiscoDisponivel;
 HANDLE hEventEspacoDiscoDisponivel;
 HANDLE hMutexArquivoDisco;
-HANDLE hEventSemMsgNovas;
+
 
 //############# VARIÁVEIS GLOBAIS #############
 char* lpimage;// Apontador para imagem local
@@ -46,7 +46,7 @@ const char* estados_texto[20] = { // 20 textos de estado
 
 //############# FUNÇÃO DA THREAD DE VISUALIZAÇÃO DE SINALIZAÇÃO #############
 DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
-	// Inicialização das variaveis auxiliares e handles
+    // Inicialização das variaveis auxiliares e handles
     HANDLE eventos[2] = { evVISUFERROVIA_PauseResume, evEncerraThreads };
     HANDLE hArquivoDiscoMapping;
     BOOL pausado = FALSE;
@@ -54,10 +54,9 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
     printf("Thread de Visualizacao de Sinalizacao iniciada\n");
 
     // Abre o arquivo em modo leitura na mesma visao que a main.cpp
-    hArquivoDiscoMapping = OpenFileMapping(FILE_MAP_READ, FALSE, L"MAPEAMENTO");
+    hArquivoDiscoMapping = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, L"MAPEAMENTO");
 
-    //Checagem de erro para OpenFileMapping
-	if (hArquivoDiscoMapping == NULL) { // Checagem de falha ao abrir o mapeamento
+    if (hArquivoDiscoMapping == NULL) { // Checagem de falha ao abrir o mapeamento
         DWORD erro = GetLastError();
 
         // Converte o codigo de erro em uma mensagem leg�vel
@@ -80,8 +79,10 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
     }
 
     // Mapeando a mesma visAo do arquivo que a main.cpp
-    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO);
- 
+    //lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO);
+    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_ALL_ACCESS, 0, 0, MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH);
+
+
     if (lpimage == NULL) {// Checagem de erro para MapViewOfFile  
         DWORD erro = GetLastError();
         LPVOID mensagemErro = NULL;
@@ -103,10 +104,10 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
 
         LocalFree(mensagemErro);
 
-        return FALSE; 
+        return FALSE;
     }
 
-    while (1) { 
+    while (1) {
         if (!pausado) {
             // Verifica os dois eventos simultaneamente (sem bloquear)
             DWORD result = WaitForMultipleObjects(2, eventos, FALSE, 0);
@@ -146,19 +147,29 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
                 }
             }
 
-			// ####### CASO NÃO ESTEJA PAUSADO OU ENCERRADO ########
+            // ####### CASO NÃO ESTEJA PAUSADO OU ENCERRADO ########
 
             DWORD waitResult = WaitForSingleObject(hEventMsgDiscoDisponivel, 0); //Espera que hajam mensagens escritas
-			if (waitResult == WAIT_OBJECT_0 && !pausado) { // Se o evento foi sinalizado e a thread nao esta pausada
+            if (waitResult == WAIT_OBJECT_0 && !pausado) { // Se o evento foi sinalizado e a thread nao esta pausada
 
                 WaitForSingleObject(hMutexArquivoDisco, INFINITE); //Garante acesso unico ao arquivo 
                 ResetEvent(hEventMsgDiscoDisponivel); // Avisa a main que recebeu a mensagem
 
                 // Processa cada mensagem
                 int mensagens_processadas = 0;
-                long tamanho = strlen(lpimage);
+                //long tamanho = strlen(lpimage);
+                long tamanho = MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH;
+                if (lpimage == NULL) {
+                    printf("lpimage é NULL! Mapeamento falhou.\n");
+                    exit(1);
+                }
+
 
                 for (long i = 0; i < tamanho; i += MAX_MSG_LENGTH) {
+                    if (lpimage[i] == '\0') {
+                        continue; // slot vazio, nada pra processar
+                    }
+
                     char mensagem[MAX_MSG_LENGTH + 1] = { 0 };
                     size_t copy_size = (tamanho - i) < MAX_MSG_LENGTH ? (tamanho - i) : MAX_MSG_LENGTH;
                     memcpy_s(mensagem, MAX_MSG_LENGTH, lpimage + i, copy_size);
@@ -195,16 +206,21 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
                             printf("%s NSEQ: %s REMOTA: %s SENSOR: %s ESTADO: %s\n",
                                 timestamp, nseq, remota, id, estadoTexto);
                             mensagens_processadas++;
+
+
+                            // APAGA A MENSAGEM PROCESSADA
+
+                            strncpy_s(lpimage + i, MAX_MSG_LENGTH, "", 1);
                         }
                     }
                 }
-                
-                SetEvent(hEventSemMsgNovas); // Sinaliza que novas mensagens foram processadas
+
+                SetEvent(hEventEspacoDiscoDisponivel); // Sinaliza que novas mensagens foram processadas
                 ReleaseMutex(hMutexArquivoDisco);
             }
 
         }
-        
+
     }
     return 0;
 
@@ -212,15 +228,15 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
 
 // ######### FUNÇÃO MAIN DO SISTEMA #########
 int main() {
-	// Inicializacao das variaveis auxiliares e handles
+    // Inicializacao das variaveis auxiliares e handles
     evVISUFERROVIA_PauseResume = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUFERROVIA_PAUSE");
     evVISUFERROVIA_Exit = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUFERROVIA_EXIT");
     evEncerraThreads = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_ENCERRA_THREADS");
-    evVISUFERROVIATemporiza��o = CreateEvent(NULL, FALSE, FALSE, L"EV_VISUFERROVIA_TEMPORIZACAO"); // evento que nunca sera setado apenas para temporiza��o
+    evVISUFERROVIATemporizacao = CreateEvent(NULL, FALSE, FALSE, L"EV_VISUFERROVIA_TEMPORIZACAO"); // evento que nunca sera setado apenas para temporiza��o
     hEventEspacoDiscoDisponivel = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_ESPACO_DISCO_DISPONIVEL");
     hMutexArquivoDisco = OpenMutex(MUTEX_ALL_ACCESS, FALSE, L"MUTEX_ARQUIVO_DISCO");
     hEventMsgDiscoDisponivel = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_MSG_DISCO_DISPONIVEL");
-    hEventSemMsgNovas = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_SEM_MSG_NOVAS");
+
 
     if (hEventMsgDiscoDisponivel == NULL) {
         printf("[Erro] Falha ao abrir EV_MSG_DISCO_DISPONIVEL: %lu\n", GetLastError());
@@ -236,10 +252,10 @@ int main() {
         return 1;
     }
 
-	WaitForSingleObject(hThread, INFINITE); // Espera a thread terminar
+    WaitForSingleObject(hThread, INFINITE); // Espera a thread terminar
 
     BOOL status;
-	status = UnmapViewOfFile(lpimage); // Desmapeia a view do arquivo
+    status = UnmapViewOfFile(lpimage); // Desmapeia a view do arquivo
     if (!status) {// Checagem de erro
         DWORD erro = GetLastError();
         LPVOID mensagemErro = NULL;
@@ -262,16 +278,21 @@ int main() {
         LocalFree(mensagemErro);
     }
 
-	// Fecha os handles de eventos e mutex
+    // Fecha os handles de eventos e mutex
     CloseHandle(hThread);
     CloseHandle(evVISUFERROVIA_PauseResume);
     CloseHandle(evVISUFERROVIA_Exit);
-    CloseHandle(evVISUFERROVIATemporiza��o);
+    CloseHandle(evVISUFERROVIATemporizacao);
     CloseHandle(evEncerraThreads);
-    CloseHandle(hEventSemMsgNovas);
+
 
     return 0;
 }
+
+
+
+
+
 
 
 
