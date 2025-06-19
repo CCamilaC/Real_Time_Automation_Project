@@ -419,6 +419,35 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
     HANDLE eventos[2] = { evFERROVIA_PauseResume, evEncerraThreads };
     BOOL pausado = FALSE;
 
+    //############ CRIAÇÃO DO ARQUIVO EM DISCO ############
+    hArquivoDisco = CreateFile(L"arquivo_sinalizacao.dat", GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    // Criação do mapeamento do arquivo
+    hArquivoDiscoMapping = CreateFileMapping(
+        hArquivoDisco, // Handle do arquivo
+        NULL,          // Atributos de segurança
+        PAGE_READWRITE,// Acesso de leitura e escrita
+        0,             // Tamanho máximo alto (0 para tamanho baixo)
+        ARQUIVO_TAMANHO_MAXIMO, // Tamanho máximo do mapeamento
+        L"MAPEAMENTO"           // Nome do mapeamento (NULL para anônimo)
+    );
+    if (hArquivoDiscoMapping == NULL) { //Checagem de erro do mapeamento
+        DWORD erro = GetLastError();
+        printf("Erro ao criar o mapeamento de arquivo. Código de erro: %d\n", erro);
+        // Você pode tratar o erro aqui (fechar handles, retornar, etc.)
+    }
+    else {
+        printf("Mapeamento de arquivo criado com sucesso!\n");
+    }
+
+    // Criação do visão de mapeamento
+    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_ALL_ACCESS, 0, 0, ARQUIVO_TAMANHO_MAXIMO);
+    if (lpimage == NULL) { // Checagem de erro do MapViewOfFile
+        DWORD err = GetLastError();
+        printf("Erro no MapViewOfFile: %d\n", err);
+        return 1;
+    }
+
     printf("[Ferrovia-Captura] Thread iniciada.\n");
 
     while (1) {
@@ -518,34 +547,7 @@ int main() {
     hMutexArquivoDisco = CreateMutex(NULL, FALSE, L"MUTEX_ARQUIVO_DISCO");
 
 
-	//############ CRIAÇÃO DO ARQUIVO EM DISCO ############
-	hArquivoDisco = CreateFile(L"arquivo_sinalizacao.dat", GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-   
-    // Criação do mapeamento do arquivo
-	hArquivoDiscoMapping = CreateFileMapping(
-		hArquivoDisco, // Handle do arquivo
-		NULL,          // Atributos de segurança
-		PAGE_READWRITE,// Acesso de leitura e escrita
-		0,             // Tamanho máximo alto (0 para tamanho baixo)
-		ARQUIVO_TAMANHO_MAXIMO, // Tamanho máximo do mapeamento
-        L"MAPEAMENTO"           // Nome do mapeamento (NULL para anônimo)
-	);
-    if (hArquivoDiscoMapping == NULL) { //Checagem de erro do mapeamento
-        DWORD erro = GetLastError();
-        printf("Erro ao criar o mapeamento de arquivo. Código de erro: %d\n", erro);
-        // Você pode tratar o erro aqui (fechar handles, retornar, etc.)
-    }
-    else {
-        printf("Mapeamento de arquivo criado com sucesso!\n");
-    }
 
-    // Criação do visão de mapeamento
-    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_ALL_ACCESS, 0, 0, ARQUIVO_TAMANHO_MAXIMO);
-	if (lpimage == NULL) { // Checagem de erro do MapViewOfFile
-        DWORD err = GetLastError();
-        printf("Erro no MapViewOfFile: %d\n", err);
-        return 1;
-    }
 
     //############ CRIAÇÃO DE THREADS ############
     
