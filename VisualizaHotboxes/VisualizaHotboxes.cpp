@@ -2,13 +2,17 @@
 #include <stdio.h>
 #include <string.h>
 
+// ################ CRIAÇÃO DE HANDLES ################
 HANDLE evVISUHOTBOX_PauseResume;
 HANDLE evVISUHOTBOX_Exit;
 HANDLE evVISUHOTBOXTemporização;
 HANDLE evEncerraThreads;
 HANDLE hPipeHotbox;
 
+//################ THREAD DE VISUALIZAÇÃO DE HOTBOXES ################
+
 DWORD WINAPI ThreadVisualizaHotboxes(LPVOID) {
+	// Inicialização das variáveis e handles
     HANDLE eventos[2] = { evVISUHOTBOX_PauseResume, evEncerraThreads };
     BOOL pausado = FALSE;
     char buffer[128];
@@ -23,7 +27,7 @@ DWORD WINAPI ThreadVisualizaHotboxes(LPVOID) {
         PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
         1, 0, 0, 0, NULL);
 
-    if (hPipeHotbox == INVALID_HANDLE_VALUE) {
+	if (hPipeHotbox == INVALID_HANDLE_VALUE) { //Checa se a criação da pipe falhou
         printf("[Erro] Falha ao criar a pipe. Erro: %lu\n", GetLastError());
         return 1;
     }
@@ -73,17 +77,18 @@ DWORD WINAPI ThreadVisualizaHotboxes(LPVOID) {
                 }
             }
 
-            WaitForSingleObject(evVISUHOTBOXTemporização, 100);
+			WaitForSingleObject(evVISUHOTBOXTemporização, 100); // Espera 100ms antes de tentar ler novamente
         }
 
+		// ################ PAUSA/RETOMADA DA THREAD ################
         DWORD result = WaitForMultipleObjects(2, eventos, FALSE, 0);
         switch (result) {
-        case WAIT_OBJECT_0:
+		case WAIT_OBJECT_0: // evVISUHOTBOX_PauseResume
             pausado = !pausado;
             printf("[Hotboxes] Thread %s.\n", pausado ? "pausada" : "retomada");
             ResetEvent(evVISUHOTBOX_PauseResume);
             break;
-        case WAIT_OBJECT_0 + 1:
+		case WAIT_OBJECT_0 + 1: // evEncerraThreads
             printf("[Hotboxes] Evento de saída recebido. Encerrando thread.\n");
             CloseHandle(hPipeHotbox);
             return 0;
@@ -93,13 +98,13 @@ DWORD WINAPI ThreadVisualizaHotboxes(LPVOID) {
 
         while (pausado) {
             DWORD r = WaitForMultipleObjects(2, eventos, FALSE, INFINITE);
-            if (r == WAIT_OBJECT_0) {
+			if (r == WAIT_OBJECT_0) { // evVISUHOTBOX_PauseResume
                 pausado = FALSE;
                 printf("[Hotboxes] Retomando execução.\n");
                 ResetEvent(evVISUHOTBOX_PauseResume);
                 break;
             }
-            else if (r == WAIT_OBJECT_0 + 1) {
+			else if (r == WAIT_OBJECT_0 + 1) { // evEncerraThreads
                 printf("[Hotboxes] Evento de saída recebido. Encerrando thread.\n");
                 CloseHandle(hPipeHotbox);
                 return 0;
@@ -109,7 +114,9 @@ DWORD WINAPI ThreadVisualizaHotboxes(LPVOID) {
     return 0;
 }
 
+//################ FUNÇÃO PRINCIPAL ################
 int main() {
+	// Criação dos eventos e threads
     evVISUHOTBOX_PauseResume = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUHOTBOX_PAUSE");
     evVISUHOTBOX_Exit = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUHOTBOX_EXIT");
     evEncerraThreads = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_ENCERRA_THREADS");
@@ -117,13 +124,14 @@ int main() {
 
     HANDLE hThread = CreateThread(NULL, 0, ThreadVisualizaHotboxes, NULL, 0, NULL);
 
-    if (hThread == NULL) {
+	if (hThread == NULL) { // Checagem de erro na criação da thread
         printf("Erro ao criar a thread.\n");
         return 1;
     }
 
-    WaitForSingleObject(hThread, INFINITE);
+	WaitForSingleObject(hThread, INFINITE); // Espera a thread terminar
 
+	// Fechamento dos handles
     CloseHandle(hThread);
     if (evVISUHOTBOX_PauseResume != NULL)
         CloseHandle(evVISUHOTBOX_PauseResume);
@@ -136,7 +144,6 @@ int main() {
 
     if (evEncerraThreads != NULL)
         CloseHandle(evEncerraThreads);
-
 
     return 0;
 }

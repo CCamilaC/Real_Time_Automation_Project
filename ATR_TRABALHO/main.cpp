@@ -16,9 +16,6 @@
 #define MAX_MENSAGENS_DISCO 200
 #define ARQUIVO_TAMANHO_MAXIMO (MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH) // 8200 bytes
 
-int disco_posicao_escrita = 0;
-char* lpimage;			// Apontador para imagem local
-
 //############ DEFINIÇÕES GLOBAIS ############
 #define __WIN32_WINNT 0X0500
 #define HAVE_STRUCT_TIMESPEC
@@ -28,7 +25,7 @@ char* lpimage;			// Apontador para imagem local
 typedef unsigned (WINAPI* CAST_FUNCTION)(LPVOID);
 typedef unsigned* CAST_LPDWORD;
 
-//############# HANDLES ##########
+//############# HANDLES #############
 HANDLE hBufferRodaCheio;  // Evento para sinalizar espaço no buffer
 
 //handles para a tarefa de leitura do teclado
@@ -70,6 +67,12 @@ typedef struct {
     char timestamp[13]; // HH:MM:SS:MS 
 } mensagem_roda;
 
+////############ VARIAVEIS GLOBAIS ##########
+int disco_posicao_escrita = 0;
+char* lpimage;			// Apontador para imagem local
+int gcounter_ferrovia = 0; //contador para mensagem de ferrovia
+int gcounter_roda = 0; //contador para mensagem de roda
+
 //########## FUNÇÃO PARA TIMESTAMP HH:MM:SS:MS ################
 void gerar_timestamp(char* timestamp) {
     SYSTEMTIME time;
@@ -103,10 +106,6 @@ void formatar_msg_roda(char* buffer, size_t buffer_size, const mensagem_roda* ms
         msg->timestamp  
     );
 }
-
-//############# CONTADORES GLOBAIS PARA MENSAGENS ################
-int gcounter_ferrovia = 0; //contador para mensagem de ferrovia
-int gcounter_roda = 0; //contador para mensagem de roda
 
 //############# FUNÇÃO DE CRIAÇÃO DE MSG FERROVIA ################
 void cria_msg_ferrovia() {
@@ -240,14 +239,11 @@ DWORD WINAPI CLPMsgFerrovia(LPVOID) {
             int tempo_ferrovia = 100 + (rand() % 1901); // 100-2000ms
 
             WaitForSingleObject(evTemporização, tempo_ferrovia); // evento que nunca será setado apenas para bloquear a thread 
-
-            //Sleep(tempo_ferrovia);
             cria_msg_ferrovia();
         }
         else {
             // Se pausado, verifica eventos mais frequentemente
 			WaitForSingleObject(evTemporização, 100); // evento que nunca será setado apenas para bloquear a thread
-            //Sleep(100);
         }
     }
     return 0;
@@ -292,14 +288,12 @@ DWORD WINAPI CLPMsgRodaQuente(LPVOID) {
 
         if (!pausado) { //Se a thread estiver permitida de rodar
             
-            //Sleep(500);
             WaitForSingleObject(evTemporização, 500); // evento que nunca será setado apenas para bloquear a thread
             cria_msg_roda();
         }
         else {
             // Se pausado, verifica eventos mais frequentemente
             WaitForSingleObject(evTemporização, 100); // evento que nunca será setado apenas para bloquear a thread
-            //Sleep(100);
         }
     }
     return 0;
@@ -317,8 +311,7 @@ BOOL EscreveMensagemDisco(const char* mensagem) {
         return FALSE;
     }
 
-    // Sinaliza que há nova mensagem disponível
-    SetEvent(hEventMsgDiscoDisponivel);
+    // Sinaliza~ção que há nova mensagem disponível encontra-se na função original
     ResetEvent(hEventSemMsgNovas);
     ReleaseMutex(hMutexArquivoDisco);
 
@@ -327,11 +320,12 @@ BOOL EscreveMensagemDisco(const char* mensagem) {
 
 //############## FUNÇÃO DA THREAD DE CAPTURA DE RODA QUENTE###############
 DWORD WINAPI CapturaHotboxThread(LPVOID) {
+    //Inicialização das bariáveis auxiliares e handles
     char mensagem[SMALL_MSG_LENGTH];
-    printf("[Hotbox-Captura] Thread iniciada.\n");
-
     HANDLE eventos[2] = { evHOTBOX_PauseResume, evEncerraThreads };
     BOOL pausado = FALSE;
+
+    printf("[Hotbox-Captura] Thread iniciada.\n");
 
     while (1) {
         // Verifica eventos de pausa/encerramento
@@ -363,8 +357,7 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
             }
         }
 
-        // Continua execução normal
-        WaitForSingleObject(hMutexBufferRoda, INFINITE);
+        WaitForSingleObject(hMutexBufferRoda, INFINITE); //Espera por acesso esclusivo a lista circular
 
         if (ReadFromRodaBuffer(mensagem)) {
             if (mensagem[8] == '9' && mensagem[9] == '9') {
@@ -380,7 +373,7 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
 
                     ReleaseMutex(hMutexPipeHotbox);
 
-                    if (!success) {
+                    if (!success) { //Checagem de erro para escrita no pipe
                         printf("[Erro] Falha ao escrever na pipe de hotbox.\n");
                         CloseHandle(hPipeHotbox);
                         hPipeHotbox = INVALID_HANDLE_VALUE;
@@ -389,9 +382,8 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
             }
         }
         else {
-            WaitForSingleObject(evTemporização, 100);
+			WaitForSingleObject(evTemporização, 100); // Espera 100ms antes de tentar ler novamente
         }
-
         ReleaseMutex(hMutexBufferRoda);
     }
 
@@ -399,37 +391,37 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
 }
 
 
-
 //############## FUNÇÃO DA THREAD DE CAPTURA DE SINALIZAÇÃO FERROVIÁRIA ###############
 DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
+	// Inicialização das variáveis auxiliares e handles
     char mensagem[MAX_MSG_LENGTH];
-    printf("[Ferrovia-Captura] Thread iniciada.\n");
-
     HANDLE eventos[2] = { evFERROVIA_PauseResume, evEncerraThreads };
     BOOL pausado = FALSE;
+
+    printf("[Ferrovia-Captura] Thread iniciada.\n");
 
     while (1) {
         DWORD status = WaitForMultipleObjects(2, eventos, FALSE, 0);
 
-        if (status == WAIT_OBJECT_0) {
+		if (status == WAIT_OBJECT_0) { // evFERROVIA_PauseResume
             pausado = !pausado;
             printf("Thread Ferrovia %s\n", pausado ? "PAUSADA" : "RETOMADA");
             ResetEvent(evFERROVIA_PauseResume);
         }
-        else if (status == WAIT_OBJECT_0 + 1) {
+		else if (status == WAIT_OBJECT_0 + 1) { // evEncerraThreads
             printf("[Ferrovia-Captura] Thread encerrada.\n");
             return 0;
         }
 
-        if (pausado) {
+		if (pausado) { // Aguarda 100ms para verificar eventos
             WaitForSingleObject(evTemporização, 100);
             continue;
         }
 
-        WaitForSingleObject(hMutexBufferFerrovia, INFINITE);
+		WaitForSingleObject(hMutexBufferFerrovia, INFINITE); //Espera por acesso exclusivo a lista circular
 
-        if (ReadFromFerroviaBuffer(mensagem)) {
-            // Faz o parsing robusto
+		if (ReadFromFerroviaBuffer(mensagem)) { // Se conseguiu ler uma mensagem do buffer
+            
             printf("\033[92m[THREAD CAPTURA FERROVIA]\033[0m Mensagem capturada: '%s'\n", mensagem);
 
             char nseq[8], tipo[3], diag[2], remota[4], id[9], estado[2], timestamp[13];
@@ -471,7 +463,7 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
             }
         }
         else {
-            WaitForSingleObject(evTemporização, 100);
+			WaitForSingleObject(evTemporização, 100); // Espera 100ms antes de tentar ler novamente
         }
 
         ReleaseMutex(hMutexBufferFerrovia);
@@ -481,11 +473,11 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
 }
 
 
-
 //############# FUNÇÃO MAIN DO SISTEMA ################
 int main() {
-    InitializeBuffers();
+	InitializeBuffers(); // Inicializa os buffers circulares 
 
+	//Criação de handles
     HANDLE hCLPThreadFerrovia = NULL;
     HANDLE hCLPThreadRoda = NULL;
     HANDLE hCapturaHotboxThread = NULL;
@@ -525,7 +517,7 @@ int main() {
 		ARQUIVO_TAMANHO_MAXIMO, // Tamanho máximo do mapeamento
         L"MAPEAMENTO"           // Nome do mapeamento (NULL para anônimo)
 	);
-    if (hArquivoDiscoMapping == NULL) {
+    if (hArquivoDiscoMapping == NULL) { //Checagem de erro do mapeamento
         DWORD erro = GetLastError();
         printf("Erro ao criar o mapeamento de arquivo. Código de erro: %d\n", erro);
         // Você pode tratar o erro aqui (fechar handles, retornar, etc.)
@@ -537,7 +529,7 @@ int main() {
     // Criação do visão de mapeamento
     lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_WRITE, 0, 0, MAX_MENSAGENS_DISCO);
 
-    //######### CRIAÇÃO DE THREADS ############
+    //############ CRIAÇÃO DE THREADS ############
     
     // Cria a thread CLP que escreve no buffer ferrovia
     hCLPThreadFerrovia = (HANDLE)_beginthreadex(
@@ -603,7 +595,7 @@ int main() {
     ZeroMemory(&pi, sizeof(pi));
 
 
-    //##########COLOCA UM PATH GERAL###################
+    //############ COLOCA UM PATH GERAL ############
     WCHAR exePath[MAX_PATH];
     WCHAR hotboxesPath[MAX_PATH];
     WCHAR sinalizacaoPath[MAX_PATH];
@@ -615,10 +607,6 @@ int main() {
     swprintf(hotboxesPath, MAX_PATH, L"%s\\VisualizaHotboxes.exe", exePath);
     swprintf(sinalizacaoPath, MAX_PATH, L"%s\\VisualizaSinalizacao.exe", exePath);
 
-    //Para arrumar os bugs
-    //wprintf(L"[DEBUG] Caminho VisualizaHotboxes: %s\n", hotboxesPath);
-    //wprintf(L"[DEBUG] Caminho VisualizaSinalizacao: %s\n", sinalizacaoPath);
-
 
     //###### Criação de processo separado com novo console para Hotboxes #########
     if (CreateProcess(
@@ -627,7 +615,7 @@ int main() {
         NULL,                      // Atributos de segurança do processo
         NULL,                      // Atributos de segurança da thread
         FALSE,                     // Herança de handles
-        CREATE_NEW_CONSOLE,       // Cria nova janela de console
+        CREATE_NEW_CONSOLE,        // Cria nova janela de console
         NULL,                      // Ambiente padrão
         NULL,                      // Diretório padrão
         &si,                       // Informações de inicialização
@@ -663,7 +651,7 @@ int main() {
     }
 
 
-    //###########Criação do pipe nomeado para o IPC entre as threads captura e visualização Hotboxes######################
+    //############ Criação do pipe nomeado para o IPC entre as threads captura e visualização Hotboxes ############
     int tentativas = 0;
     while (tentativas < 10) {
         hPipeHotbox = CreateFile(
@@ -750,7 +738,6 @@ int main() {
             }
         }
         WaitForSingleObject(evTemporização, 1000); // evento que nunca será setado apenas para bloquear a thread
-        //Sleep(1000); // Atualização periódica
     }
 
     // Limpeza
@@ -778,8 +765,8 @@ int main() {
     // Desmapeia o arquivo
     BOOL status;
     status = UnmapViewOfFile(lpimage);
-    // Checagem de erro
-    if (!status) {
+        
+	if (!status) {// Checagem de erro do desmapeamento
         DWORD erro = GetLastError();
         LPVOID mensagemErro = NULL;
 
@@ -799,9 +786,6 @@ int main() {
             erro, (char*)mensagemErro);
 
         LocalFree(mensagemErro);
-
-        // Tratamento adicional pode ser necessário aqui
-        // Por exemplo, tentar novamente ou encerrar o programa
         return FALSE;
     }
 
@@ -823,9 +807,6 @@ int main() {
     CloseHandle(hEventEspacoDiscoDisponivel);
 	CloseHandle(hArquivoDisco);
     CloseHandle(hEventSemMsgNovas);
-
-    //printf("\nPressione qualquer tecla para sair...\n");
-    //_getch();
 
     return 0;
 }

@@ -3,10 +3,12 @@
 #include <string.h>
 #include <io.h>
 
+//############# DEFINIÇÕES GLOBAIS #############
 #define ARQUIVO_DISCO "arquivo_sinalizacao.dat"
 #define MAX_MSG_LENGTH 41
 #define MAX_MENSAGENS_DISCO 200
 
+//############# HANDLES #############
 HANDLE evVISUFERROVIA_PauseResume;
 HANDLE evVISUFERROVIA_Exit;
 HANDLE evVISUFERROVIATemporização;
@@ -16,10 +18,9 @@ HANDLE hEventEspacoDiscoDisponivel;
 HANDLE hMutexArquivoDisco;
 HANDLE hEventSemMsgNovas;
 
+//############# VARIÁVEIS GLOBAIS #############
 char* lpimage;// Apontador para imagem local
-
-// 20 textos de estado
-const char* estados_texto[20] = {
+const char* estados_texto[20] = { // 20 textos de estado
     "Desvio atuado",
     "Desvio nao atuado",
     "Sinaleiro em PARE",
@@ -43,18 +44,21 @@ const char* estados_texto[20] = {
    
 };
 
+//############# FUNÇÃO DA THREAD DE VISUALIZAÇÃO DE SINALIZAÇÃO #############
 DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
+	// Inicialização das variáveis e handles
     HANDLE eventos[2] = { evVISUFERROVIA_PauseResume, evEncerraThreads };
     HANDLE espera[2] = { hEventMsgDiscoDisponivel, evEncerraThreads };
     HANDLE hArquivoDiscoMapping;
     BOOL pausado = FALSE;
+    long tamanho = strlen(lpimage);
 
     printf("Thread de Visualizacao de Sinalizacao iniciada\n");
 
     // Abre o arquivo em modo leitura na mesma visão que a main.cpp
     hArquivoDiscoMapping = OpenFileMapping(FILE_MAP_READ, FALSE, L"MAPEAMENTO");
 
-    if (hArquivoDiscoMapping == NULL) {
+	if (hArquivoDiscoMapping == NULL) { // Checagem de erro ao abrir o arquivo mapeado
         DWORD erro = GetLastError();
         LPVOID mensagemErro;
         FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -67,8 +71,9 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
         printf("Mapeamento aberto com sucesso!\n");
     }
 
+	// Mapeia a visão do arquivo para leitura
     lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO);
-    if (lpimage == NULL) {
+	if (lpimage == NULL) { // Checagem de erro ao mapear a visão do arquivo
         DWORD erro = GetLastError();
         LPVOID mensagemErro = NULL;
         FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -85,11 +90,10 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
 
         if (waitResult == WAIT_OBJECT_0) {  // hEventMsgDiscoDisponivel
             if (!pausado) {
-                WaitForSingleObject(hMutexArquivoDisco, INFINITE);
-                ResetEvent(hEventMsgDiscoDisponivel);
-
-                long tamanho = strlen(lpimage);
-                for (long i = 0; i < tamanho; i += MAX_MSG_LENGTH) {
+				WaitForSingleObject(hMutexArquivoDisco, INFINITE); // Espera por acesso exclusivo ao arquivo mapeado
+				ResetEvent(hEventMsgDiscoDisponivel); // Reseta o evento para evitar múltiplas leituras
+                                
+				for (long i = 0; i < tamanho; i += MAX_MSG_LENGTH) { // percorre o arquivo mapeado e formata as mensagens
                     char mensagem[MAX_MSG_LENGTH + 1] = { 0 };
                     size_t copy_size = (tamanho - i) < MAX_MSG_LENGTH ? (tamanho - i) : MAX_MSG_LENGTH;
                     memcpy_s(mensagem, MAX_MSG_LENGTH, lpimage + i, copy_size);
@@ -121,7 +125,7 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
                     }
                 }
 
-                SetEvent(hEventSemMsgNovas);
+				SetEvent(hEventSemMsgNovas); // Sinaliza que novas mensagens foram lidas
                 ReleaseMutex(hMutexArquivoDisco);
             }
         }
@@ -163,8 +167,9 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
     return 0;
 }
 
-
+//############# FUNÇÃO PRINCIPAL #############
 int main() {
+	// ############# CRIAÇÃO DOS EVENTOS #############
     evVISUFERROVIA_PauseResume = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUFERROVIA_PAUSE");
     evVISUFERROVIA_Exit = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUFERROVIA_EXIT");
     evEncerraThreads = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_ENCERRA_THREADS");
@@ -182,18 +187,21 @@ int main() {
         printf("[Erro] Falha MUTEX_ARQUIVO_DISCO: %lu\n", GetLastError());
         return 1;
     }
+
+	// ############# CRIAÇÃO DA THREAD DE VISUALIZAÇÃO DE SINALIZAÇÃO #############
     HANDLE hThread = CreateThread(NULL, 0, ThreadVisualizaSinalizacao, NULL, 0, NULL);
-    if (hThread == NULL) {
+	if (hThread == NULL) { // Checagem de erro na criação da thread
         printf("Erro ao criar a thread.\n");
         return 1;
     }
 
-    WaitForSingleObject(hThread, INFINITE);
+	WaitForSingleObject(hThread, INFINITE); // Espera a thread terminar
 
+    // Desmapear a visão do arquivo
     BOOL status;
-    status = UnmapViewOfFile(lpimage);
-    // Checagem de erro
-    if (!status) {
+	status = UnmapViewOfFile(lpimage); 
+       
+	if (!status) { // Checagem de erro ao desmapear a visão do arquivo
         DWORD erro = GetLastError();
         LPVOID mensagemErro = NULL;
 
@@ -215,6 +223,7 @@ int main() {
         LocalFree(mensagemErro);
     }
 
+	// ############## FECHAMENTO DOS HANDLES #############
     CloseHandle(hThread);
     CloseHandle(evVISUFERROVIA_PauseResume);
     CloseHandle(evVISUFERROVIA_Exit);
