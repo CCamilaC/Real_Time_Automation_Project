@@ -85,11 +85,11 @@ DWORD WINAPI ThreadVisualizaHotboxes(LPVOID) {
         switch (result) {
 		case WAIT_OBJECT_0: // evVISUHOTBOX_PauseResume
             pausado = !pausado;
-            printf("[Hotboxes] Thread %s.\n", pausado ? "pausada" : "retomada");
+            printf("\033[91mThread de visualização de Hotboxes %s.\n", pausado ? "PAUSADA\033[0m" : "RETOMADA\033[0m");
             ResetEvent(evVISUHOTBOX_PauseResume);
             break;
 		case WAIT_OBJECT_0 + 1: // evEncerraThreads
-            printf("[Hotboxes] Evento de saída recebido. Encerrando thread.\n");
+            printf("\033[91mThread Visualiza Hotboxes: Evento de saída recebido. Encerrando thread.\033[0m\n");
             CloseHandle(hPipeHotbox);
             return 0;
         default:
@@ -100,12 +100,12 @@ DWORD WINAPI ThreadVisualizaHotboxes(LPVOID) {
             DWORD r = WaitForMultipleObjects(2, eventos, FALSE, INFINITE);
 			if (r == WAIT_OBJECT_0) { // evVISUHOTBOX_PauseResume
                 pausado = FALSE;
-                printf("[Hotboxes] Retomando execução.\n");
+                printf("\033[91mThread Visualiza Hotboxes: Retomando execução.\033[0m\n");
                 ResetEvent(evVISUHOTBOX_PauseResume);
                 break;
             }
 			else if (r == WAIT_OBJECT_0 + 1) { // evEncerraThreads
-                printf("[Hotboxes] Evento de saída recebido. Encerrando thread.\n");
+                printf("\033[91mThread Visualiza Hotboxes: Evento de saída recebido. Encerrando thread.\033[91m\n");
                 CloseHandle(hPipeHotbox);
                 return 0;
             }

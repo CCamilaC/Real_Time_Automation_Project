@@ -221,7 +221,8 @@ DWORD WINAPI CLPMsgFerrovia(LPVOID) {
 
         case WAIT_OBJECT_0 + 1: // evCLPFerrovia_PauseResume
             pausado = !pausado;
-            printf("Thread Ferrovia %s\n", pausado ? "PAUSADA" : "RETOMADA");
+            printf("\033[91mThread CLP Ferrovia %s\n", pausado ? "PAUSADA\033[0m" : "RETOMADA\033[0m");
+            
             ResetEvent(evCLPFerrovia_PauseResume);
             break;
 
@@ -273,7 +274,7 @@ DWORD WINAPI CLPMsgRodaQuente(LPVOID) {
 
         case WAIT_OBJECT_0 + 1: // evCLPHotbox_PauseResume
             pausado = !pausado;
-            printf("Thread Hotbox %s\n", pausado ? "PAUSADA" : "RETOMADA");
+            printf("\033[91mThread CLP Hotbox %s\n", pausado ? "PAUSADA\033[0m" : "RETOMADA\033[0m");
             ResetEvent(evCLPHotbox_PauseResume);
             break;
 
@@ -334,7 +335,7 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
         switch (status) {
         case WAIT_OBJECT_0: // evHOTBOX_PauseResume
             pausado = !pausado;
-            printf("[Hotbox-Captura] Thread %s.\n", pausado ? "pausada" : "retomada");
+            printf("\033[91mThread Captura Hotboxes %s.\n", pausado ? "PAUSADA\033[0m" : "RETOMADA\033[0m");
             ResetEvent(evHOTBOX_PauseResume);
             break;
         case WAIT_OBJECT_0 + 1: // evEncerraThreads
@@ -347,12 +348,12 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
             DWORD r = WaitForMultipleObjects(2, eventos, FALSE, INFINITE);
             if (r == WAIT_OBJECT_0) {
                 pausado = FALSE;
-                printf("[Hotbox-Captura] Retomando execução.\n");
+                printf("\033[91mThread Captura Hotboxes Retomando execução.\033[0m\n");
                 ResetEvent(evHOTBOX_PauseResume);
                 break;
             }
             else if (r == WAIT_OBJECT_0 + 1) {
-                printf("[Hotbox-Captura] Thread encerrada.\n");
+                printf("\033[91mthread Captura Hotboxes Thread encerrada.\033[0m\n");
                 return 0;
             }
         }
@@ -405,11 +406,11 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
 
 		if (status == WAIT_OBJECT_0) { // evFERROVIA_PauseResume
             pausado = !pausado;
-            printf("Thread Ferrovia %s\n", pausado ? "PAUSADA" : "RETOMADA");
+            printf("\033[91mThread Captura Ferrovia %s\n", pausado ? "PAUSADA\033[0m" : "RETOMADA\033[0m");
             ResetEvent(evFERROVIA_PauseResume);
         }
 		else if (status == WAIT_OBJECT_0 + 1) { // evEncerraThreads
-            printf("[Ferrovia-Captura] Thread encerrada.\n");
+            printf("\033[91m Thread Captura Ferrovia: Thread encerrada.\033[0m\n");
             return 0;
         }
 
@@ -422,7 +423,7 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
 
 		if (ReadFromFerroviaBuffer(mensagem)) { // Se conseguiu ler uma mensagem do buffer
             
-            //printf("\033[92m[THREAD CAPTURA FERROVIA]\033[0m Mensagem capturada: '%s'\n", mensagem);
+            //printf("\033[92m[THREAD CAPTURA FERROVIA]\033[0m Mensagem capturada: '%s'\n", mensagem); //usado para testes
 
             char nseq[8], tipo[3], diag[2], remota[4], id[9], estado[2], timestamp[13];
             sscanf_s(mensagem, "%7[^;];%2[^;];%1[^;];%3[^;];%8[^;];%1[^;];%12s",
@@ -702,40 +703,35 @@ int main() {
                 clp_pausado = !clp_pausado;
                 SetEvent(evCLPFerrovia_PauseResume); 
                 SetEvent(evCLPHotbox_PauseResume);
-                printf("Tecla C acionada");
-                printf("CLP %s\n", clp_pausado ? "PAUSADO" : "RETOMADO");
+                printf("\033[91mTecla C acionada\033[0m\n");
                 break;
 
             case 'd':
                 ferrovia_pausado = !ferrovia_pausado;
                 SetEvent(evFERROVIA_PauseResume);
-                printf("Tecla D acionada");
-                printf("Captura Ferrovia %s\n", ferrovia_pausado ? "PAUSADA" : "RETOMADA");
+                printf("\033[91mTecla D acionada\033[0m\n");
                 break;
 
             case 'h':
                 hotbox_pausado = !hotbox_pausado;
                 SetEvent(evHOTBOX_PauseResume);
-                printf("Tecla H acionada");
-                printf("Captura Hotbox %s\n", hotbox_pausado ? "PAUSADA" : "RETOMADA");
+                printf("\033[91mTecla H acionada\033[0m\n");
                 break;
 
             case 's':
                 visuFerrovia_pausado = !visuFerrovia_pausado;
                 SetEvent(evVISUFERROVIA_PauseResume);
-                printf("Tecla S acionada");
-                printf("Visualização Ferrovia %s\n", visuFerrovia_pausado ? "PAUSADA" : "RETOMADA");
+                printf("\033[91mTecla S acionada\033[0m\n");
                 break;
 
             case 'q':
                 visuHotbox_pausado = !visuHotbox_pausado;
                 SetEvent(evVISUHOTBOX_PauseResume);
-                printf("Tecla Q acionada");
-                printf("Visualização Hotbox %s\n", visuHotbox_pausado ? "PAUSADA" : "RETOMADA");
+                printf("\033[91mTecla Q acionada\033[0m\n");
                 break;
 
             case 27: // ESC
-                printf("Tecla ESC acionada.  Encerrando todas as tarefas...\n");
+                printf("\033[91mTecla ESC acionada.\nEncerrando todas as tarefas...\033[0m\n");
                 SetEvent(evEncerraThreads);
 
                 executando = FALSE;

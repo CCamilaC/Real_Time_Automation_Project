@@ -115,16 +115,16 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
             case WAIT_OBJECT_0:  // evVISUFERROVIA_PauseResume
                 pausado = !pausado;
                 if (pausado) {
-                    printf("[Sinalizacao] Thread pausada. Aguardando retomada...\n");
+                    printf("\033[91m[Sinalizacao] Thread pausada. Aguardando retomada...\033[0m\n");
                 }
                 else {
-                    printf("[Sinalizacao] Retomando execucao.\n");
+                    printf("\033[91m[Sinalizacao] Retomando execucao.\033[0m\n");
                 }
                 ResetEvent(evVISUFERROVIA_PauseResume);
                 break;
 
             case WAIT_OBJECT_0 + 1:  // evVISUFERROVIA_Exit
-                printf("[Sinalizacao] Evento de saida recebido. Encerrando thread.\n");
+                printf("\033[91m[Sinalizacao] Evento de saida recebido. Encerrando thread.\033[0m\n");
                 return 0;
 
             default:
@@ -136,12 +136,12 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
                 DWORD r = WaitForMultipleObjects(2, eventos, FALSE, INFINITE);
                 if (r == WAIT_OBJECT_0) { // Toggle pausa
                     pausado = FALSE;
-                    printf("[Sinalizacao] Retomando execucao.\n");
+                    printf("\033[91m[Sinalizacao] Retomando execucao.\033[0m\n");
                     ResetEvent(evVISUFERROVIA_PauseResume);
                     break;
                 }
                 else if (r == WAIT_OBJECT_0 + 1) { // Evento de saida
-                    printf("[Sinalizacao] Evento de saida recebido. Encerrando thread.\n");
+                    printf("\033[91m[Sinalizacao] Evento de saida recebido. Encerrando thread.\033[0m\n");
                     return 0;
                 }
             }
