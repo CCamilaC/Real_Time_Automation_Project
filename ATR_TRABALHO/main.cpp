@@ -43,7 +43,7 @@ HANDLE hEventMsgDiscoDisponivel;
 HANDLE hArquivoDisco; 
 HANDLE hMutexPipeHotbox;
 HANDLE hArquivoDiscoMapping;
-HANDLE hEventSemMsgNovas;
+
 
 //######### STRUCT MENSAGEM FERROVIA ##########
 typedef struct {
@@ -301,18 +301,37 @@ DWORD WINAPI CLPMsgRodaQuente(LPVOID) {
 
 //######### FUNÇÃO PARA ESCRITA NO ARQUIVO EM DISCO ##################
 BOOL EscreveMensagemDisco(const char* mensagem) {
+	if (lpimage == NULL) {
+		printf("[Erro] Imagem de disco não mapeada.\n");
+		return FALSE;
+	}
+    
     WaitForSingleObject(hMutexArquivoDisco, INFINITE);
+    long posicao_escrita = 0;
+
+    while (posicao_escrita < (MAX_MENSAGENS_DISCO*MAX_MSG_LENGTH) &&
+        lpimage[posicao_escrita] != '\0') {
+        posicao_escrita += MAX_MSG_LENGTH;
+    }
+
+	// Verifica se há espaço no arquivo circular
+    if (posicao_escrita >= (MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH)) {
+        ReleaseMutex(hMutexArquivoDisco);
+        printf("[INFO] Buffer cheio. Aguardando espaço liberado...\n");
+        WaitForSingleObject(hEventEspacoDiscoDisponivel, INFINITE);
+        return EscreveMensagemDisco(mensagem); // Tenta novamente recursivamente
+    }
 
 	// Escreve a mensagem no arquivo circular
-    errno_t err = strcpy_s(lpimage, MAX_MSG_LENGTH, mensagem);
+    errno_t err = strcpy_s(lpimage+posicao_escrita, MAX_MSG_LENGTH, mensagem);
     if (err != 0) {
         // Tratamento de erro na cópia
         ReleaseMutex(hMutexArquivoDisco);
         return FALSE;
     }
 
-    // Sinaliza~ção que há nova mensagem disponível encontra-se na função original
-    ResetEvent(hEventSemMsgNovas);
+    // Sinalização que há nova mensagem disponível encontra-se na função original
+    SetEvent(hEventMsgDiscoDisponivel);
     ReleaseMutex(hMutexArquivoDisco);
 
     return TRUE;
@@ -451,16 +470,8 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
             }
             else {
                 // Escreve no arquivo circular
-                BOOL gravado = EscreveMensagemDisco(mensagem);
-
-                if (!gravado) {
-                    printf("\033[33m[FERROVIA] Arquivo cheio. Aguardando espaço...\033[0m\n");
-                    WaitForSingleObject(hEventEspacoDiscoDisponivel, INFINITE);
-                }
-                else {
-                    SetEvent(hEventMsgDiscoDisponivel); // Notifica VisualizaSinalizacao
-                }
-            }
+                EscreveMensagemDisco(mensagem);
+             }
         }
         else {
 			WaitForSingleObject(evTemporização, 100); // Espera 100ms antes de tentar ler novamente
@@ -503,11 +514,11 @@ int main() {
     hEventMsgDiscoDisponivel = CreateEvent(NULL, TRUE, FALSE, L"EV_MSG_DISCO_DISPONIVEL");
     hEventEspacoDiscoDisponivel = CreateEvent(NULL, TRUE, FALSE, L"EV_ESPACO_DISCO_DISPONIVEL");
     hMutexArquivoDisco = CreateMutex(NULL, FALSE, L"MUTEX_ARQUIVO_DISCO");
-	hEventSemMsgNovas = CreateEvent(NULL, TRUE, FALSE, L"EV_SEM_MSG_NOVAS");
+
 
 	//############ CRIAÇÃO DO ARQUIVO EM DISCO ############
 	hArquivoDisco = CreateFile(L"arquivo_sinalizacao.dat", GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    
+   
     // Criação do mapeamento do arquivo
 	hArquivoDiscoMapping = CreateFileMapping(
 		hArquivoDisco, // Handle do arquivo
@@ -527,7 +538,7 @@ int main() {
     }
 
     // Criação do visão de mapeamento
-    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_WRITE, 0, 0, MAX_MENSAGENS_DISCO);
+    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_WRITE, 0, 0, ARQUIVO_TAMANHO_MAXIMO);
 
     //############ CRIAÇÃO DE THREADS ############
     
@@ -806,7 +817,7 @@ int main() {
     CloseHandle(hEventMsgDiscoDisponivel);
     CloseHandle(hEventEspacoDiscoDisponivel);
 	CloseHandle(hArquivoDisco);
-    CloseHandle(hEventSemMsgNovas);
+
 
     return 0;
 }

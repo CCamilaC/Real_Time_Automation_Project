@@ -11,12 +11,12 @@
 //############# HANDLES #############
 HANDLE evVISUFERROVIA_PauseResume;
 HANDLE evVISUFERROVIA_Exit;
-HANDLE evVISUFERROVIATemporiza��o;
+HANDLE evVISUFERROVIATemporizacao;
 HANDLE evEncerraThreads;
 HANDLE hEventMsgDiscoDisponivel;
 HANDLE hEventEspacoDiscoDisponivel;
 HANDLE hMutexArquivoDisco;
-HANDLE hEventSemMsgNovas;
+
 
 //############# VARIÁVEIS GLOBAIS #############
 char* lpimage;// Apontador para imagem local
@@ -80,7 +80,9 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
     }
 
     // Mapeando a mesma visAo do arquivo que a main.cpp
-    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO);
+    //lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO);
+    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH);
+
  
     if (lpimage == NULL) {// Checagem de erro para MapViewOfFile  
         DWORD erro = GetLastError();
@@ -156,9 +158,19 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
 
                 // Processa cada mensagem
                 int mensagens_processadas = 0;
-                long tamanho = strlen(lpimage);
+                //long tamanho = strlen(lpimage);
+                long tamanho = MAX_MENSAGENS_DISCO*MAX_MSG_LENGTH;
+                if (lpimage == NULL) {
+                    printf("lpimage é NULL! Mapeamento falhou.\n");
+                    exit(1);
+                }
+
 
                 for (long i = 0; i < tamanho; i += MAX_MSG_LENGTH) {
+                    if (lpimage[i] == '\0') {
+                        continue; // slot vazio, nada pra processar
+                    }
+
                     char mensagem[MAX_MSG_LENGTH + 1] = { 0 };
                     size_t copy_size = (tamanho - i) < MAX_MSG_LENGTH ? (tamanho - i) : MAX_MSG_LENGTH;
                     memcpy_s(mensagem, MAX_MSG_LENGTH, lpimage + i, copy_size);
@@ -195,11 +207,22 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
                             printf("%s NSEQ: %s REMOTA: %s SENSOR: %s ESTADO: %s\n",
                                 timestamp, nseq, remota, id, estadoTexto);
                             mensagens_processadas++;
+
+                            // APAGA A MENSAGEM PROCESSADA
+                           // memset(lpimage + i, 0, MAX_MSG_LENGTH);
+                            
+
+                            //printf("lpimage = %p, i = %ld\n", (void*)lpimage, i);
+                            //lpimage[i] = '\0';
+                            printf("lpimage = %p, i = %ld\n", (void*)lpimage, i);
+
+                            //strncpy_s(lpimage + i, MAX_MSG_LENGTH, "", 1);
+
                         }
                     }
                 }
                 
-                SetEvent(hEventSemMsgNovas); // Sinaliza que novas mensagens foram processadas
+                SetEvent(hEventEspacoDiscoDisponivel); // Sinaliza que novas mensagens foram processadas
                 ReleaseMutex(hMutexArquivoDisco);
             }
 
@@ -216,11 +239,11 @@ int main() {
     evVISUFERROVIA_PauseResume = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUFERROVIA_PAUSE");
     evVISUFERROVIA_Exit = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUFERROVIA_EXIT");
     evEncerraThreads = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_ENCERRA_THREADS");
-    evVISUFERROVIATemporiza��o = CreateEvent(NULL, FALSE, FALSE, L"EV_VISUFERROVIA_TEMPORIZACAO"); // evento que nunca sera setado apenas para temporiza��o
+    evVISUFERROVIATemporizacao = CreateEvent(NULL, FALSE, FALSE, L"EV_VISUFERROVIA_TEMPORIZACAO"); // evento que nunca sera setado apenas para temporiza��o
     hEventEspacoDiscoDisponivel = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_ESPACO_DISCO_DISPONIVEL");
     hMutexArquivoDisco = OpenMutex(MUTEX_ALL_ACCESS, FALSE, L"MUTEX_ARQUIVO_DISCO");
     hEventMsgDiscoDisponivel = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_MSG_DISCO_DISPONIVEL");
-    hEventSemMsgNovas = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_SEM_MSG_NOVAS");
+
 
     if (hEventMsgDiscoDisponivel == NULL) {
         printf("[Erro] Falha ao abrir EV_MSG_DISCO_DISPONIVEL: %lu\n", GetLastError());
@@ -266,9 +289,9 @@ int main() {
     CloseHandle(hThread);
     CloseHandle(evVISUFERROVIA_PauseResume);
     CloseHandle(evVISUFERROVIA_Exit);
-    CloseHandle(evVISUFERROVIATemporiza��o);
+    CloseHandle(evVISUFERROVIATemporizacao);
     CloseHandle(evEncerraThreads);
-    CloseHandle(hEventSemMsgNovas);
+
 
     return 0;
 }
