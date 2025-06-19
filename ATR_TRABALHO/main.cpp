@@ -702,35 +702,40 @@ int main() {
                 clp_pausado = !clp_pausado;
                 SetEvent(evCLPFerrovia_PauseResume); 
                 SetEvent(evCLPHotbox_PauseResume);
+                printf("Tecla C acionada");
                 printf("CLP %s\n", clp_pausado ? "PAUSADO" : "RETOMADO");
                 break;
 
             case 'd':
                 ferrovia_pausado = !ferrovia_pausado;
                 SetEvent(evFERROVIA_PauseResume);
+                printf("Tecla D acionada");
                 printf("Captura Ferrovia %s\n", ferrovia_pausado ? "PAUSADA" : "RETOMADA");
                 break;
 
             case 'h':
                 hotbox_pausado = !hotbox_pausado;
                 SetEvent(evHOTBOX_PauseResume);
+                printf("Tecla H acionada");
                 printf("Captura Hotbox %s\n", hotbox_pausado ? "PAUSADA" : "RETOMADA");
                 break;
 
             case 's':
                 visuFerrovia_pausado = !visuFerrovia_pausado;
                 SetEvent(evVISUFERROVIA_PauseResume);
+                printf("Tecla S acionada");
                 printf("Visualização Ferrovia %s\n", visuFerrovia_pausado ? "PAUSADA" : "RETOMADA");
                 break;
 
             case 'q':
                 visuHotbox_pausado = !visuHotbox_pausado;
                 SetEvent(evVISUHOTBOX_PauseResume);
+                printf("Tecla Q acionada");
                 printf("Visualização Hotbox %s\n", visuHotbox_pausado ? "PAUSADA" : "RETOMADA");
                 break;
 
             case 27: // ESC
-                printf("Encerrando todas as tarefas...\n");
+                printf("Tecla ESC acionada. Encerrando todas as tarefas...\n");
                 SetEvent(evEncerraThreads);
 
                 executando = FALSE;
