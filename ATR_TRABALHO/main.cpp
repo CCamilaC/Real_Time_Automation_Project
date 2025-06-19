@@ -735,7 +735,7 @@ int main() {
                 break;
 
             case 27: // ESC
-                printf("Tecla ESC acionada. Encerrando todas as tarefas...\n");
+                printf("Tecla ESC acionada.  Encerrando todas as tarefas...\n");
                 SetEvent(evEncerraThreads);
 
                 executando = FALSE;
