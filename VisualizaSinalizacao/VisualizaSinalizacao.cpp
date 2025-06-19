@@ -54,10 +54,9 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
     printf("Thread de Visualizacao de Sinalizacao iniciada\n");
 
     // Abre o arquivo em modo leitura na mesma visao que a main.cpp
-    hArquivoDiscoMapping = OpenFileMapping(FILE_MAP_READ, FALSE, L"MAPEAMENTO");
+    hArquivoDiscoMapping = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, L"MAPEAMENTO");
 
-    //Checagem de erro para OpenFileMapping
-	if (hArquivoDiscoMapping == NULL) { // Checagem de falha ao abrir o mapeamento
+   	if (hArquivoDiscoMapping == NULL) { // Checagem de falha ao abrir o mapeamento
         DWORD erro = GetLastError();
 
         // Converte o codigo de erro em uma mensagem leg�vel
@@ -81,7 +80,7 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
 
     // Mapeando a mesma visAo do arquivo que a main.cpp
     //lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO);
-    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH);
+    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_ALL_ACCESS, 0, 0, MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH);
 
  
     if (lpimage == NULL) {// Checagem de erro para MapViewOfFile  
@@ -208,16 +207,10 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
                                 timestamp, nseq, remota, id, estadoTexto);
                             mensagens_processadas++;
 
-                            // APAGA A MENSAGEM PROCESSADA
-                           // memset(lpimage + i, 0, MAX_MSG_LENGTH);
                             
-
-                            //printf("lpimage = %p, i = %ld\n", (void*)lpimage, i);
-                            //lpimage[i] = '\0';
-                            printf("lpimage = %p, i = %ld\n", (void*)lpimage, i);
-
-                            //strncpy_s(lpimage + i, MAX_MSG_LENGTH, "", 1);
-
+                            // APAGA A MENSAGEM PROCESSADA
+                           
+                            strncpy_s(lpimage + i, MAX_MSG_LENGTH, "", 1);
                         }
                     }
                 }

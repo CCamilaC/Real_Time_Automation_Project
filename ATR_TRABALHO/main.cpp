@@ -538,7 +538,12 @@ int main() {
     }
 
     // Criação do visão de mapeamento
-    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_WRITE, 0, 0, ARQUIVO_TAMANHO_MAXIMO);
+    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_ALL_ACCESS, 0, 0, ARQUIVO_TAMANHO_MAXIMO);
+	if (lpimage == NULL) { // Checagem de erro do MapViewOfFile
+        DWORD err = GetLastError();
+        printf("Erro no MapViewOfFile: %d\n", err);
+        return 1;
+    }
 
     //############ CRIAÇÃO DE THREADS ############
     
