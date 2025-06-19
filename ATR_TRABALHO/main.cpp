@@ -161,7 +161,7 @@ void cria_msg_ferrovia() {
 
     // Escreve no buffer circular
     WriteToFerroviaBuffer(buffer);
-    printf("\033[32mMensagem Ferrovia criada: %s\033[0m\n", buffer);
+    printf("\033[32m[THREAD CLP FERROVIA]Mensagem Ferrovia criada: %s\033[0m\n", buffer);
 }
 
 //############# FUNÇÃO DE CRIAÇÃO DE MSG RODA QUENTE ################
