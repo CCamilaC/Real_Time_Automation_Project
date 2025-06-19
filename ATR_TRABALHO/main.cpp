@@ -311,6 +311,7 @@ BOOL EscreveMensagemDisco(const char* mensagem) {
     WaitForSingleObject(hMutexArquivoDisco, INFINITE);
     long posicao_escrita = 0;
 
+	// Encontra a próxima posição livre no arquivo circular
     while (posicao_escrita < (MAX_MENSAGENS_DISCO*MAX_MSG_LENGTH) &&
         lpimage[posicao_escrita] != '\0') {
         posicao_escrita += MAX_MSG_LENGTH;
