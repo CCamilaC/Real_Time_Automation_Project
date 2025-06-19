@@ -485,7 +485,7 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
                 timestamp, (unsigned int)sizeof(timestamp));
 
             if (diag[0] == '1') {
-                // Envia para VisualizaFerrovia via pipe
+                // Envia para VisualizaSinalizacao via pipe
                 if (hPipeHotbox != INVALID_HANDLE_VALUE) {
                     DWORD bytesWritten;
                     WaitForSingleObject(hMutexPipeHotbox, INFINITE);
