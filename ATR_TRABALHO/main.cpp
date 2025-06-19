@@ -13,7 +13,7 @@
 #include <wchar.h>
 #include <tchar.h>
 #define ARQUIVO_DISCO "arquivo_sinalizacao.dat" //nome do arquivo usado para armazenar as mensagens de sinalização
-#define MAX_MENSAGENS_DISCO 5
+#define MAX_MENSAGENS_DISCO 200
 #define ARQUIVO_TAMANHO_MAXIMO (MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH) // 8200 bytes
 
 int disco_posicao_escrita = 0;
@@ -34,8 +34,6 @@ HANDLE hBufferRodaCheio;  // Evento para sinalizar espaço no buffer
 //handles para a tarefa de leitura do teclado
 HANDLE evCLPFerrovia_PauseResume, evCLPHotbox_PauseResume, evFERROVIA_PauseResume, evHOTBOX_PauseResume, evTemporização;
 HANDLE evVISUFERROVIA_PauseResume, evVISUHOTBOX_PauseResume;
-HANDLE evCLP_Exit, evFERROVIA_Exit, evHOTBOX_Exit;
-HANDLE evVISUFERROVIA_Exit, evVISUHOTBOX_Exit;
 HANDLE evEncerraThreads=NULL;
 HANDLE hPipeHotbox = INVALID_HANDLE_VALUE; //handle global para o pipe
 DWORD WINAPI hCLPThreadFerrovia(LPVOID);
@@ -161,7 +159,7 @@ void cria_msg_ferrovia() {
 
     // Escreve no buffer circular
     WriteToFerroviaBuffer(buffer);
-    printf("\033[32m[THREAD CLP FERROVIA]Mensagem Ferrovia criada: %s\033[0m\n", buffer);
+    printf("\033[34m[THREAD CLP FERROVIA]\033[0m Mensagem Ferrovia criada: %s\033[0m\n", buffer);
 }
 
 //############# FUNÇÃO DE CRIAÇÃO DE MSG RODA QUENTE ################
@@ -197,13 +195,13 @@ void cria_msg_roda() {
 
     // Escreve no buffer circular
     WriteToRodaBuffer(buffer);
-    printf("\033[32mMensagem Hotbox criada: %s\033[0m\n", buffer);
+    printf("\033[36m[THREAD CLP HOTBOX]\033[0m  Hotbox criada: %s\033[0m\n", buffer);
 }
 
 //############# THREAD CRIA MENSAGENS DE FERROVIA CLP #############
 DWORD WINAPI CLPMsgFerrovia(LPVOID) {
     BOOL pausado = FALSE;
-    HANDLE eventos[2] = {evCLP_Exit, evCLPFerrovia_PauseResume };
+    HANDLE eventos[2] = { evEncerraThreads, evCLPFerrovia_PauseResume };
 
     while (1) {
         // Verifica buffer ferrovia
@@ -219,7 +217,7 @@ DWORD WINAPI CLPMsgFerrovia(LPVOID) {
         DWORD ret = WaitForMultipleObjects(2, eventos, FALSE, 0);
 
         switch (ret) {
-        case WAIT_OBJECT_0: // evCLP_Exit
+        case WAIT_OBJECT_0: // evEncerraThreads
             return 0;
 
         case WAIT_OBJECT_0 + 1: // evCLPFerrovia_PauseResume
@@ -258,7 +256,7 @@ DWORD WINAPI CLPMsgFerrovia(LPVOID) {
 //############# THREAD CRIA MENSAGENS DE RODA QUENTE CLP #############
 DWORD WINAPI CLPMsgRodaQuente(LPVOID) {
     BOOL pausado = FALSE;
-    HANDLE eventos[2] = {evCLP_Exit, evCLPHotbox_PauseResume};
+    HANDLE eventos[2] = { evEncerraThreads, evCLPHotbox_PauseResume};
 
     while (1) {
         // Verifica buffer roda
@@ -274,7 +272,7 @@ DWORD WINAPI CLPMsgRodaQuente(LPVOID) {
         DWORD ret = WaitForMultipleObjects(2, eventos, FALSE, 0);
 
         switch (ret) {
-        case WAIT_OBJECT_0: // evCLP_Exit
+        case WAIT_OBJECT_0: // evEncerraThreads
             return 0;   
 
         case WAIT_OBJECT_0 + 1: // evCLPHotbox_PauseResume
@@ -370,7 +368,8 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
 
         if (ReadFromRodaBuffer(mensagem)) {
             if (mensagem[8] == '9' && mensagem[9] == '9') {
-                printf("\033[31mMensagem lida de Hotbox: %s\033[0m\n", mensagem);
+                printf("\033[94m[THREAD CAPTURA DADOS HOTBOX]\033[0m Mensagem lida de Hotbox: %s\n", mensagem);
+
 
                 if (hPipeHotbox != INVALID_HANDLE_VALUE) {
                     DWORD bytesWritten;
@@ -431,6 +430,8 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
 
         if (ReadFromFerroviaBuffer(mensagem)) {
             // Faz o parsing robusto
+            printf("\033[92m[THREAD CAPTURA FERROVIA]\033[0m Mensagem capturada: '%s'\n", mensagem);
+
             char nseq[8], tipo[3], diag[2], remota[4], id[9], estado[2], timestamp[13];
             sscanf_s(mensagem, "%7[^;];%2[^;];%1[^;];%3[^;];%8[^;];%1[^;];%12s",
                 nseq, (unsigned int)sizeof(nseq),
@@ -504,7 +505,6 @@ int main() {
 
  
     // Eventos de término
-    evCLP_Exit = CreateEvent(NULL, TRUE, FALSE, L"EV_CLP_EXIT");
     evEncerraThreads = CreateEvent(NULL, TRUE, FALSE, L"EV_ENCERRA_THREADS"    );
 
     // Eventos para memória circular em disco
@@ -743,7 +743,6 @@ int main() {
 
             case 27: // ESC
                 printf("Encerrando todas as tarefas...\n");
-                SetEvent(evCLP_Exit);
                 SetEvent(evEncerraThreads);
 
                 executando = FALSE;
@@ -814,12 +813,7 @@ int main() {
     CloseHandle(evHOTBOX_PauseResume);
     CloseHandle(evVISUFERROVIA_PauseResume);
     CloseHandle(evVISUHOTBOX_PauseResume);
-    CloseHandle(evCLP_Exit);
     CloseHandle(evEncerraThreads);
-    CloseHandle(evFERROVIA_Exit);
-    CloseHandle(evHOTBOX_Exit);
-    CloseHandle(evVISUFERROVIA_Exit);
-    CloseHandle(evVISUHOTBOX_Exit);
     CloseHandle(hMutexPipeHotbox);
     DestroyBuffers();
     CloseHandle(hMutexBufferRoda);
