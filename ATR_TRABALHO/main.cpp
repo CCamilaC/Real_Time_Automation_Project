@@ -361,7 +361,7 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
 
         if (ReadFromRodaBuffer(mensagem)) {
             if (mensagem[8] == '9' && mensagem[9] == '9') {
-                printf("\033[94m[THREAD CAPTURA DADOS HOTBOX]\033[0m Mensagem lida de Hotbox: %s\n", mensagem);
+                //printf("\033[94m[THREAD CAPTURA DADOS HOTBOX]\033[0m Mensagem lida de Hotbox: %s\n", mensagem);
 
 
                 if (hPipeHotbox != INVALID_HANDLE_VALUE) {
@@ -422,7 +422,7 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
 
 		if (ReadFromFerroviaBuffer(mensagem)) { // Se conseguiu ler uma mensagem do buffer
             
-            printf("\033[92m[THREAD CAPTURA FERROVIA]\033[0m Mensagem capturada: '%s'\n", mensagem);
+            //printf("\033[92m[THREAD CAPTURA FERROVIA]\033[0m Mensagem capturada: '%s'\n", mensagem);
 
             char nseq[8], tipo[3], diag[2], remota[4], id[9], estado[2], timestamp[13];
             sscanf_s(mensagem, "%7[^;];%2[^;];%1[^;];%3[^;];%8[^;];%1[^;];%12s",

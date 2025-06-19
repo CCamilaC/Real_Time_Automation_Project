@@ -148,8 +148,8 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
 
 			// ####### CASO NÃO ESTEJA PAUSADO OU ENCERRADO ########
 
-            DWORD waitResult = WaitForSingleObject(hEventMsgDiscoDisponivel, INFINITE); //Espera que hajam mensagens escritas
-            if (waitResult == WAIT_OBJECT_0 && !pausado) {
+            DWORD waitResult = WaitForSingleObject(hEventMsgDiscoDisponivel, 0); //Espera que hajam mensagens escritas
+			if (waitResult == WAIT_OBJECT_0 && !pausado) { // Se o evento foi sinalizado e a thread nao esta pausada
 
                 WaitForSingleObject(hMutexArquivoDisco, INFINITE); //Garante acesso unico ao arquivo 
                 ResetEvent(hEventMsgDiscoDisponivel); // Avisa a main que recebeu a mensagem
