@@ -95,7 +95,7 @@ void formatar_msg_ferrovia(char* buffer, size_t buffer_size, const mensagem_ferr
         msg->timestamp);
 }
 
-//############# FUNÇÃO FORMATA MSG RODA QUENTE ###################
+//############# FUNÇÃO FORMATA MSG RODA QUENTE ####################
 void formatar_msg_roda(char* buffer, size_t buffer_size, const mensagem_roda* msg) {
     // Formata a mensagem no padrão especificado: NNNNNNN;NN;AAAAAAAA;N;HH:MM:SS:MS
     sprintf_s(buffer, buffer_size, "%07d;%s;%s;%d;%s",
