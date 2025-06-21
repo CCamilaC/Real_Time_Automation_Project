@@ -43,6 +43,8 @@ HANDLE hEventMsgDiscoDisponivel;
 HANDLE hArquivoDisco; 
 HANDLE hMutexPipeHotbox;
 HANDLE hArquivoDiscoMapping;
+HANDLE hWriteEvent;
+HANDLE hFile;
 
 
 //######### STRUCT MENSAGEM FERROVIA ##########
@@ -66,6 +68,14 @@ typedef struct {
     int8_t estado;      // Estado (1 ou 2)
     char timestamp[13]; // HH:MM:SS:MS 
 } mensagem_roda;
+
+//######### STRUCT DE PARAMETROS DO ARQUIVO ###########
+typedef struct {
+    HANDLE hFile;
+    HANDLE hEventWrite;
+    HANDLE hEventRead;
+    BOOL bContinue;
+} ThreadParams;
 
 ////############ VARIAVEIS GLOBAIS ##########
 int disco_posicao_escrita = 0;
@@ -303,40 +313,60 @@ DWORD WINAPI CLPMsgRodaQuente(LPVOID) {
 
 //######### FUNÇÃO PARA ESCRITA NO ARQUIVO EM DISCO ##################
 BOOL EscreveMensagemDisco(const char* mensagem) {
-	if (lpimage == NULL) {
-		printf("[Erro] Imagem de disco não mapeada.\n");
-		return FALSE;
-	}
+	
+    DWORD bytesWritten;
+    OVERLAPPED overlapped = { 0 };
+    overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     
-    WaitForSingleObject(hMutexArquivoDisco, INFINITE);
-    long posicao_escrita = 0;
-
-	// Encontra a próxima posição livre no arquivo circular
-    while (posicao_escrita < (MAX_MENSAGENS_DISCO*MAX_MSG_LENGTH) &&
-        lpimage[posicao_escrita] != '\0') {
-        posicao_escrita += MAX_MSG_LENGTH;
-    }
-
-	// Verifica se há espaço no arquivo circular
-    if (posicao_escrita >= (MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH)) {
-        ReleaseMutex(hMutexArquivoDisco);
-        printf("[INFO] Arquivo cheio. Aguardando espaço liberado...\n");
-        WaitForSingleObject(hEventEspacoDiscoDisponivel, INFINITE);
-        return EscreveMensagemDisco(mensagem); // Tenta novamente recursivamente
-    }
-
-	// Escreve a mensagem no arquivo circular
-    errno_t err = strcpy_s(lpimage+posicao_escrita, MAX_MSG_LENGTH, mensagem);
-    if (err != 0) {
-        // Tratamento de erro na cópia
-        ReleaseMutex(hMutexArquivoDisco);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        printf("[Erro] Handle de arquivo inválido!\n");
         return FALSE;
     }
+
+    ResetEvent(hWriteEvent);
+
+    LARGE_INTEGER li;
+    li.QuadPart = 0;
+
+    overlapped.Offset = li.LowPart;
+    overlapped.OffsetHigh = li.HighPart;
+
+
+    WaitForSingleObject(hMutexArquivoDisco, INFINITE);
+    //long posicao_escrita = 0;
+
+    BOOL bResult = WriteFile(
+        hFile,
+        mensagem,
+        strlen(mensagem),
+        &bytesWritten,
+        &overlapped
+    );
+
+    if (bResult) {
+        printf("Escrita realizada sem overlap\n");
+  }
+
+    if (!bResult) {
+        DWORD err = GetLastError();
+
+        if (err == ERROR_IO_PENDING) {
+            WaitForSingleObject(overlapped.hEvent, INFINITE);
+            bResult = GetOverlappedResult(hFile, &overlapped, &bytesWritten, FALSE);
+           
+        }
+        else {
+            printf("[Erro] Falha na escrita assíncrona: %lu\n", err);
+            CloseHandle(overlapped.hEvent);
+            return FALSE;
+        }
+    }
+    
 
     // Sinalização que há nova mensagem disponível encontra-se na função original
     SetEvent(hEventMsgDiscoDisponivel);
     ReleaseMutex(hMutexArquivoDisco);
-
+	
     return TRUE;
 }
 
@@ -347,7 +377,7 @@ DWORD WINAPI CapturaHotboxThread(LPVOID) {
     HANDLE eventos[2] = { evHOTBOX_PauseResume, evEncerraThreads };
     BOOL pausado = FALSE;
 
-    printf("[Hotbox-Captura] Thread iniciada.\n");
+
 
     while (1) {
         // Verifica eventos de pausa/encerramento
@@ -419,38 +449,7 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
     char mensagem[MAX_MSG_LENGTH];
     HANDLE eventos[2] = { evFERROVIA_PauseResume, evEncerraThreads };
     BOOL pausado = FALSE;
-
-    //############ CRIAÇÃO DO ARQUIVO EM DISCO ############
-    hArquivoDisco = CreateFile(L"arquivo_sinalizacao.dat", GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-    // Criação do mapeamento do arquivo
-    hArquivoDiscoMapping = CreateFileMapping(
-        hArquivoDisco, // Handle do arquivo
-        NULL,          // Atributos de segurança
-        PAGE_READWRITE,// Acesso de leitura e escrita
-        0,             // Tamanho máximo alto (0 para tamanho baixo)
-        ARQUIVO_TAMANHO_MAXIMO, // Tamanho máximo do mapeamento
-        L"MAPEAMENTO"           // Nome do mapeamento (NULL para anônimo)
-    );
-    if (hArquivoDiscoMapping == NULL) { //Checagem de erro do mapeamento
-        DWORD erro = GetLastError();
-        printf("Erro ao criar o mapeamento de arquivo. Código de erro: %d\n", erro);
-        // Você pode tratar o erro aqui (fechar handles, retornar, etc.)
-    }
-    else {
-        printf("Mapeamento de arquivo criado com sucesso!\n");
-    }
-
-    // Criação do visão de mapeamento
-    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_ALL_ACCESS, 0, 0, ARQUIVO_TAMANHO_MAXIMO);
-    if (lpimage == NULL) { // Checagem de erro do MapViewOfFile
-        DWORD err = GetLastError();
-        printf("Erro no MapViewOfFile: %d\n", err);
-        return 1;
-    }
-
-    printf("[Ferrovia-Captura] Thread iniciada.\n");
-
+ 
     while (1) {
         DWORD status = WaitForMultipleObjects(2, eventos, FALSE, 0);
 
@@ -546,8 +545,24 @@ int main() {
     hEventMsgDiscoDisponivel = CreateEvent(NULL, TRUE, FALSE, L"EV_MSG_DISCO_DISPONIVEL");
     hEventEspacoDiscoDisponivel = CreateEvent(NULL, TRUE, FALSE, L"EV_ESPACO_DISCO_DISPONIVEL");
     hMutexArquivoDisco = CreateMutex(NULL, FALSE, L"MUTEX_ARQUIVO_DISCO");
+    hWriteEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
+    
+    //############ CRIAÇÃO DO ARQUIVO EM DISCO ############
+    hFile = CreateFileA(
+        ARQUIVO_DISCO,
+        GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_ALWAYS,
+        FILE_FLAG_OVERLAPPED,
+        NULL
+    );
 
+    if (hFile == INVALID_HANDLE_VALUE) {
+        printf("[Erro] Falha ao criar arquivo: %d\n", GetLastError());
+        return 1;
+    }
 
 
     //############ CRIAÇÃO DE THREADS ############
@@ -563,7 +578,7 @@ int main() {
     );
 
     if (hCLPThreadFerrovia) {
-        printf("Thread CLP criada com ID=0x%x\n", dwThreadId);
+        printf("Thread simulação Ferrovia CLP criada com ID=0x%x\n", dwThreadId);
     }
 
     // Cria a thread CLP que escreve no buffer roda
@@ -577,7 +592,7 @@ int main() {
     );
 
     if (hCLPThreadRoda) {
-        printf("Thread CLP criada com ID=0x%x\n", dwThreadId);
+        printf("Thread simulação Hotbox CLP criada com ID=0x%x\n", dwThreadId);
     }
 
     // Cria a thread de Captura de Dados dos HotBoxes

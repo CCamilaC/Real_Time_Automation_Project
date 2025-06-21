@@ -16,10 +16,11 @@ HANDLE evEncerraThreads;
 HANDLE hEventMsgDiscoDisponivel;
 HANDLE hEventEspacoDiscoDisponivel;
 HANDLE hMutexArquivoDisco;
+HANDLE hFile; // Handle do arquivo mapeado
 
 
 //############# VARIÁVEIS GLOBAIS #############
-char* lpimage;// Apontador para imagem local
+OVERLAPPED overlapped;
 const char* estados_texto[20] = { // 20 textos de estado
     "Desvio atuado",
     "Desvio nao atuado",
@@ -44,70 +45,131 @@ const char* estados_texto[20] = { // 20 textos de estado
 
 };
 
+DWORD WINAPI ProcessarMensagens(const char* mensagem, DWORD tamanho) {
+    // Processa cada mensagem
+    int mensagens_processadas = 0;
+    //long tamanho = strlen(lpimage);
+    
+
+    
+    for (long i = 0; i < tamanho; i += MAX_MSG_LENGTH) {
+        const char* mensagemAtual = mensagem + i;
+
+        if (mensagemAtual[0] == '\0' || mensagemAtual[0] == ' ') {
+            continue;
+        }
+
+        // Processamento da mensagem 
+        char nseq[8] = { 0 }, tipo[3] = { 0 }, diag[2] = { 0 },
+            remota[4] = { 0 }, id[9] = { 0 }, estado[2] = { 0 },
+            timestamp[13] = { 0 };
+
+        int parsed = sscanf_s(mensagem, "%7[^;];%2[^;];%1[^;];%3[^;];%8[^;];%1[^;];%12s",
+            nseq, (unsigned)_countof(nseq),
+            tipo, (unsigned)_countof(tipo),
+            diag, (unsigned)_countof(diag),
+            remota, (unsigned)_countof(remota),
+            id, (unsigned)_countof(id),
+            estado, (unsigned)_countof(estado),
+            timestamp, (unsigned)_countof(timestamp));
+
+        if (parsed == 7) {
+            int estado_int = estado[0] - '0';
+            if (estado_int >= 0 && estado_int < 20) {
+                int indice_aleatorio;
+                if (estado_int == 0) {
+                    // Numero par aleatorio (0, 2, 4, ..., 18)
+                    indice_aleatorio = (rand() % 10) * 2;
+                }
+                else if (estado_int == 1) {
+                    // Numero Impar aleatorio (1, 3, 5, ..., 19)
+                    indice_aleatorio = (rand() % 10) * 2 + 1;
+                }
+                const char* estadoTexto = estados_texto[indice_aleatorio];
+
+                printf("%s NSEQ: %s REMOTA: %s SENSOR: %s ESTADO: %s\n",
+                    timestamp, nseq, remota, id, estadoTexto);
+                mensagens_processadas++;
+
+
+                // APAGA A MENSAGEM PROCESSADA
+
+                char apagado[MAX_MSG_LENGTH] = { 0 }; // Buffer preenchido com zeros
+                DWORD offset = i * MAX_MSG_LENGTH;
+
+                OVERLAPPED overlappedWrite = { 0 };
+                overlappedWrite.Offset = offset;
+                overlappedWrite.OffsetHigh = 0;
+
+                DWORD bytesWritten = 0;
+
+                BOOL bWrite = WriteFile(
+                    hFile,
+                    apagado,
+                    MAX_MSG_LENGTH,
+                    &bytesWritten,
+                    &overlappedWrite
+                );
+
+                if (!bWrite) {
+                    DWORD err = GetLastError();
+                    if (err == ERROR_IO_PENDING) {
+                        // Espera a escrita assíncrona completar
+                        BOOL res = GetOverlappedResult(hFile, &overlappedWrite, &bytesWritten, TRUE);
+                        if (res) {
+                           
+                        }
+                        else {
+                            printf("[ERRO] Falha ao concluir escrita assíncrona para apagar. Erro %lu\n", GetLastError());
+                        }
+                    }
+                    else {
+                        printf("[ERRO] Falha na escrita assíncrona para apagar. Erro: %lu\n", err);
+                    }
+                }
+
+            }
+        }
+    }
+    return 0;
+
+}
+
 //############# FUNÇÃO DA THREAD DE VISUALIZAÇÃO DE SINALIZAÇÃO #############
 DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
-	// Inicialização das variaveis auxiliares e handles
+    // Inicialização das variaveis auxiliares e handles
     HANDLE eventos[2] = { evVISUFERROVIA_PauseResume, evEncerraThreads };
     HANDLE hArquivoDiscoMapping;
+
     BOOL pausado = FALSE;
 
     printf("Thread de Visualizacao de Sinalizacao iniciada\n");
 
-    // Abre o arquivo em modo leitura na mesma visao que a main.cpp
-    hArquivoDiscoMapping = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, L"MAPEAMENTO");
+    hFile = CreateFileA(
+        ARQUIVO_DISCO,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,  // Permite escrita simultânea
+        NULL,
+        OPEN_EXISTING,  // ABRE o arquivo existente (não cria)
+        FILE_FLAG_OVERLAPPED,
+        NULL
+    );
 
-   	if (hArquivoDiscoMapping == NULL) { // Checagem de falha ao abrir o mapeamento
-        DWORD erro = GetLastError();
-
-        // Converte o codigo de erro em uma mensagem leg�vel
-        LPVOID mensagemErro;
-        FormatMessage(
-            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-            NULL,
-            erro,
-            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            (LPTSTR)&mensagemErro,
-            0,
-            NULL
-        );
-
-        printf("Erro ao abrir o mapeamento de arquivo. Codigo: %d - Mensagem: %s\n", erro, (char*)mensagemErro);
-        LocalFree(mensagemErro);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        DWORD err = GetLastError();
+        if (err == ERROR_FILE_NOT_FOUND) {
+            printf("[INFO] Arquivo ainda não existe. Aguardando...\n");
+        }
+        else {
+            printf("[ERRO] Falha ao abrir arquivo: %d\n", err);
+        }
     }
     else {
-        printf("Mapeamento aberto com sucesso!\n");
+        printf("[INFO] Arquivo aberto com sucesso.\n");
     }
 
-    // Mapeando a mesma visAo do arquivo que a main.cpp
-    //lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_READ, 0, 0, MAX_MENSAGENS_DISCO);
-    lpimage = (char*)MapViewOfFile(hArquivoDiscoMapping, FILE_MAP_ALL_ACCESS, 0, 0, MAX_MENSAGENS_DISCO * MAX_MSG_LENGTH);
 
- 
-    if (lpimage == NULL) {// Checagem de erro para MapViewOfFile  
-        DWORD erro = GetLastError();
-        LPVOID mensagemErro = NULL;
-
-        FormatMessage(
-            FORMAT_MESSAGE_ALLOCATE_BUFFER |
-            FORMAT_MESSAGE_FROM_SYSTEM |
-            FORMAT_MESSAGE_IGNORE_INSERTS,
-            NULL,
-            erro,
-            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            (LPTSTR)&mensagemErro,
-            0,
-            NULL
-        );
-
-        printf("Falha ao mapear a view do arquivo. Erro %d: %s\n",
-            erro, (char*)mensagemErro);
-
-        LocalFree(mensagemErro);
-
-        return FALSE; 
-    }
-
-    while (1) { 
+    while (1) {
         if (!pausado) {
             // Verifica os dois eventos simultaneamente (sem bloquear)
             DWORD result = WaitForMultipleObjects(2, eventos, FALSE, 0);
@@ -147,80 +209,47 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
                 }
             }
 
-			// ####### CASO NÃO ESTEJA PAUSADO OU ENCERRADO ########
+            // ####### CASO NÃO ESTEJA PAUSADO OU ENCERRADO ########
 
             DWORD waitResult = WaitForSingleObject(hEventMsgDiscoDisponivel, 0); //Espera que hajam mensagens escritas
-			if (waitResult == WAIT_OBJECT_0 && !pausado) { // Se o evento foi sinalizado e a thread nao esta pausada
+            if (waitResult == WAIT_OBJECT_0 && !pausado) { // Se o evento foi sinalizado e a thread nao esta pausada
 
                 WaitForSingleObject(hMutexArquivoDisco, INFINITE); //Garante acesso unico ao arquivo 
                 ResetEvent(hEventMsgDiscoDisponivel); // Avisa a main que recebeu a mensagem
-
-                // Processa cada mensagem
-                int mensagens_processadas = 0;
-                //long tamanho = strlen(lpimage);
-                long tamanho = MAX_MENSAGENS_DISCO*MAX_MSG_LENGTH;
-                if (lpimage == NULL) {
-                    printf("lpimage é NULL! Mapeamento falhou.\n");
-                    exit(1);
-                }
-
-
-                for (long i = 0; i < tamanho; i += MAX_MSG_LENGTH) {
-                    if (lpimage[i] == '\0') {
-                        continue; // slot vazio, nada pra processar
-                    }
-
-                    char mensagem[MAX_MSG_LENGTH + 1] = { 0 };
-                    size_t copy_size = (tamanho - i) < MAX_MSG_LENGTH ? (tamanho - i) : MAX_MSG_LENGTH;
-                    memcpy_s(mensagem, MAX_MSG_LENGTH, lpimage + i, copy_size);
-                    mensagem[copy_size] = '\0'; // Garante terminacao nula
-
-                    // Processamento da mensagem 
-                    char nseq[8] = { 0 }, tipo[3] = { 0 }, diag[2] = { 0 },
-                        remota[4] = { 0 }, id[9] = { 0 }, estado[2] = { 0 },
-                        timestamp[13] = { 0 };
-
-                    int parsed = sscanf_s(mensagem, "%7[^;];%2[^;];%1[^;];%3[^;];%8[^;];%1[^;];%12s",
-                        nseq, (unsigned)_countof(nseq),
-                        tipo, (unsigned)_countof(tipo),
-                        diag, (unsigned)_countof(diag),
-                        remota, (unsigned)_countof(remota),
-                        id, (unsigned)_countof(id),
-                        estado, (unsigned)_countof(estado),
-                        timestamp, (unsigned)_countof(timestamp));
-
-                    if (parsed == 7) {
-                        int estado_int = estado[0] - '0';
-                        if (estado_int >= 0 && estado_int < 20) {
-                            int indice_aleatorio;
-                            if (estado_int == 0) {
-                                // Numero par aleatorio (0, 2, 4, ..., 18)
-                                indice_aleatorio = (rand() % 10) * 2;
-                            }
-                            else if (estado_int == 1) {
-                                // Numero Impar aleatorio (1, 3, 5, ..., 19)
-                                indice_aleatorio = (rand() % 10) * 2 + 1;
-                            }
-                            const char* estadoTexto = estados_texto[indice_aleatorio];
-
-                            printf("%s NSEQ: %s REMOTA: %s SENSOR: %s ESTADO: %s\n",
-                                timestamp, nseq, remota, id, estadoTexto);
-                            mensagens_processadas++;
-
-                            
-                            // APAGA A MENSAGEM PROCESSADA
-                           
-                            strncpy_s(lpimage + i, MAX_MSG_LENGTH, "", 1);
-                        }
-                    }
-                }
                 
+                DWORD fileSize = GetFileSize(hFile, NULL);
+                char* buffer = (char*)malloc(fileSize + 1);
+
+                BOOL bResult = ReadFile(
+                    hFile,
+                    buffer,
+                    fileSize,
+                    NULL,
+                    &overlapped
+                );
+
+                if (!bResult && GetLastError() == ERROR_IO_PENDING) {
+                    //WaitForSingleObject(overlapped.hEvent, INFINITE);
+                    DWORD bytesRead;
+                    bResult = GetOverlappedResult(hFile, &overlapped, &bytesRead, FALSE);
+
+                    if (bResult) {
+                        buffer[bytesRead] = '\0';
+                        ProcessarMensagens(buffer, bytesRead); // Função para processar as mensagens
+                    }
+                }
+
+                // Trunca o arquivo após a leitura
+                SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+                SetEndOfFile(hFile);
+
+
                 SetEvent(hEventEspacoDiscoDisponivel); // Sinaliza que novas mensagens foram processadas
                 ReleaseMutex(hMutexArquivoDisco);
             }
 
         }
-        
+
     }
     return 0;
 
@@ -228,7 +257,7 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
 
 // ######### FUNÇÃO MAIN DO SISTEMA #########
 int main() {
-	// Inicializacao das variaveis auxiliares e handles
+    // Inicializacao das variaveis auxiliares e handles
     evVISUFERROVIA_PauseResume = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUFERROVIA_PAUSE");
     evVISUFERROVIA_Exit = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_VISUFERROVIA_EXIT");
     evEncerraThreads = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_ENCERRA_THREADS");
@@ -236,6 +265,8 @@ int main() {
     hEventEspacoDiscoDisponivel = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_ESPACO_DISCO_DISPONIVEL");
     hMutexArquivoDisco = OpenMutex(MUTEX_ALL_ACCESS, FALSE, L"MUTEX_ARQUIVO_DISCO");
     hEventMsgDiscoDisponivel = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"EV_MSG_DISCO_DISPONIVEL");
+
+
 
 
     if (hEventMsgDiscoDisponivel == NULL) {
@@ -252,33 +283,33 @@ int main() {
         return 1;
     }
 
-	WaitForSingleObject(hThread, INFINITE); // Espera a thread terminar
+    WaitForSingleObject(hThread, INFINITE); // Espera a thread terminar
 
-    BOOL status;
-	status = UnmapViewOfFile(lpimage); // Desmapeia a view do arquivo
-    if (!status) {// Checagem de erro
-        DWORD erro = GetLastError();
-        LPVOID mensagemErro = NULL;
+    //   BOOL status;
+       //status = UnmapViewOfFile(lpimage); // Desmapeia a view do arquivo
+    //   if (!status) {// Checagem de erro
+    //       DWORD erro = GetLastError();
+    //       LPVOID mensagemErro = NULL;
 
-        FormatMessage(
-            FORMAT_MESSAGE_ALLOCATE_BUFFER |
-            FORMAT_MESSAGE_FROM_SYSTEM |
-            FORMAT_MESSAGE_IGNORE_INSERTS,
-            NULL,
-            erro,
-            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            (LPTSTR)&mensagemErro,
-            0,
-            NULL
-        );
+    //       FormatMessage(
+    //           FORMAT_MESSAGE_ALLOCATE_BUFFER |
+    //           FORMAT_MESSAGE_FROM_SYSTEM |
+    //           FORMAT_MESSAGE_IGNORE_INSERTS,
+    //           NULL,
+    //           erro,
+    //           MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+    //           (LPTSTR)&mensagemErro,
+    //           0,
+    //           NULL
+    //       );
 
-        printf("Falha ao desmapear a view do arquivo. Erro %d: %s\n",
-            erro, (char*)mensagemErro);
+    //       printf("Falha ao desmapear a view do arquivo. Erro %d: %s\n",
+    //           erro, (char*)mensagemErro);
 
-        LocalFree(mensagemErro);
-    }
+    //       LocalFree(mensagemErro);
+    //   }
 
-	// Fecha os handles de eventos e mutex
+       // Fecha os handles de eventos e mutex
     CloseHandle(hThread);
     CloseHandle(evVISUFERROVIA_PauseResume);
     CloseHandle(evVISUFERROVIA_Exit);
