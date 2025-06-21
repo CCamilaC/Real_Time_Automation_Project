@@ -49,9 +49,9 @@ DWORD WINAPI ProcessarMensagens(const char* mensagem, DWORD tamanho) {
     // Processa cada mensagem
     int mensagens_processadas = 0;
     //long tamanho = strlen(lpimage);
-    
 
-    
+
+
     for (long i = 0; i < tamanho; i += MAX_MSG_LENGTH) {
         const char* mensagemAtual = mensagem + i;
 
@@ -117,7 +117,7 @@ DWORD WINAPI ProcessarMensagens(const char* mensagem, DWORD tamanho) {
                         // Espera a escrita assíncrona completar
                         BOOL res = GetOverlappedResult(hFile, &overlappedWrite, &bytesWritten, TRUE);
                         if (res) {
-                           
+
                         }
                         else {
                             printf("[ERRO] Falha ao concluir escrita assíncrona para apagar. Erro %lu\n", GetLastError());
@@ -216,7 +216,7 @@ DWORD WINAPI ThreadVisualizaSinalizacao(LPVOID) {
 
                 WaitForSingleObject(hMutexArquivoDisco, INFINITE); //Garante acesso unico ao arquivo 
                 ResetEvent(hEventMsgDiscoDisponivel); // Avisa a main que recebeu a mensagem
-                
+
                 DWORD fileSize = GetFileSize(hFile, NULL);
                 char* buffer = (char*)malloc(fileSize + 1);
 
