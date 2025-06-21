@@ -46,7 +46,7 @@ A aplicação é composta por múltiplas **threads** e **processos**, que se com
 - **Eventos (WinAPI)** para sincronização entre as threads e controle via teclado.
 
 ## Demonstração em vídeo
-
+Clique na imagem abaixo para ver o vídeo no Youtube com os testes:
 [![Assista à Demonstração](https://img.youtube.com/vi/4lq4ou5mtMc/0.jpg)](https://youtu.be/4lq4ou5mtMc)
 
 
