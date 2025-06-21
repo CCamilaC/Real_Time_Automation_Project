@@ -333,8 +333,7 @@ BOOL EscreveMensagemDisco(const char* mensagem) {
 
 
     WaitForSingleObject(hMutexArquivoDisco, INFINITE);
-    //long posicao_escrita = 0;
-
+   
     BOOL bResult = WriteFile(
         hFile,
         mensagem,
@@ -362,7 +361,6 @@ BOOL EscreveMensagemDisco(const char* mensagem) {
         }
     }
     
-
     // Sinalização que há nova mensagem disponível encontra-se na função original
     SetEvent(hEventMsgDiscoDisponivel);
     ReleaseMutex(hMutexArquivoDisco);
@@ -501,6 +499,19 @@ DWORD WINAPI CapturaSinalizacaoThread(LPVOID) {
             }
             else {
                 // Escreve no arquivo circular
+                DWORD tamanhoArquivo = GetFileSize(hFile, NULL);
+                if (tamanhoArquivo == INVALID_FILE_SIZE) {
+                    printf("[Erro] Falha ao obter tamanho do arquivo. Erro: %lu\n", GetLastError());
+                }
+                else if (tamanhoArquivo >= ARQUIVO_TAMANHO_MAXIMO) {
+                    printf("[Ferrovia] Arquivo cheio. Aguardando espaco disponivel...\n");
+
+                    // Aguarda até que hEventEspacoDiscoDisponivel seja sinalizado
+                    WaitForSingleObject(hEventEspacoDiscoDisponivel, INFINITE);
+
+                    printf("[Ferrovia] Espaco liberado. Retomando escrita.\n");
+                }
+
                 EscreveMensagemDisco(mensagem);
              }
         }
