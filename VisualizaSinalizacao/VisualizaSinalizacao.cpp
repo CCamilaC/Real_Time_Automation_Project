@@ -285,29 +285,6 @@ int main() {
 
     WaitForSingleObject(hThread, INFINITE); // Espera a thread terminar
 
-    //   BOOL status;
-       //status = UnmapViewOfFile(lpimage); // Desmapeia a view do arquivo
-    //   if (!status) {// Checagem de erro
-    //       DWORD erro = GetLastError();
-    //       LPVOID mensagemErro = NULL;
-
-    //       FormatMessage(
-    //           FORMAT_MESSAGE_ALLOCATE_BUFFER |
-    //           FORMAT_MESSAGE_FROM_SYSTEM |
-    //           FORMAT_MESSAGE_IGNORE_INSERTS,
-    //           NULL,
-    //           erro,
-    //           MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-    //           (LPTSTR)&mensagemErro,
-    //           0,
-    //           NULL
-    //       );
-
-    //       printf("Falha ao desmapear a view do arquivo. Erro %d: %s\n",
-    //           erro, (char*)mensagemErro);
-
-    //       LocalFree(mensagemErro);
-    //   }
 
        // Fecha os handles de eventos e mutex
     CloseHandle(hThread);
